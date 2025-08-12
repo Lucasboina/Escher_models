@@ -4,10 +4,10 @@
 # Ativar venv
 
 ## Windows
-````.venv/Scripts/activate```
+```.venv/Scripts/activate```
 ## Linux
-````source .venv/Scripts/activate```
-#Intalar requirements
+```source .venv/Scripts/activate```
+# Intalar requirements
 ```pip install -r requirements.txt```
 # Roda o projeto
-````python 'nome do arquivo```
+```python 'nome do arquivo```
