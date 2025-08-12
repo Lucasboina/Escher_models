@@ -1,5 +1,5 @@
 # Cria ammbiente virtual
-````python -m venv .venv```
+```python -m venv .venv```
 
 # Ativar venv
 
