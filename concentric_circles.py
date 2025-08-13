@@ -17,9 +17,6 @@ CENTRAL_SPHERE_RADIUS = 0.6    # Raio da esfera central. Deve ser menor que BASE
 APPLY_COLOR_GRADIENT = True    # Se True, aplica o degradê de cores.
 
 APPLY_BOOLEAN_UNION = True     # Se True, todas as cascas serão unidas em uma única malha.
-EXPORT_MODEL = True            # Se True, o modelo final será exportado para um arquivo.
-EXPORT_FORMAT = 'stl'          # Formato de exportação ('obj' ou 'stl').
-OUTPUT_DIRECTORY = 'output_escher_rinds' # Diretório para salvar o modelo exportado.
 SHOW_VISUALIZATION = True      # Se True, o modelo será visualizado interativamente.
 
 
@@ -155,21 +152,5 @@ if __name__ == "__main__":
         scene = trimesh.Scene(final_mesh)
         scene.show()
         print("Visualização concluída. Feche a janela para continuar.")
-
-    # --- Exportação ---
-    if EXPORT_MODEL and final_mesh:
-        os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
-        filename = f"escher_sphere_gradient.{EXPORT_FORMAT.lower()}"
-        filepath = os.path.join(OUTPUT_DIRECTORY, filename)
-        
-        print(f"Exportando modelo para: {filepath}")
-        try:
-            # Formatos como OBJ e PLY suportam cores de vértice. STL não suporta.
-            if EXPORT_FORMAT.lower() not in ['obj', 'ply', 'gltf', 'glb']:
-                 print(f"Aviso: O formato '{EXPORT_FORMAT}' não suporta cores de vértice. A cor não será salva.")
-            final_mesh.export(filepath)
-            print("Exportação concluída com sucesso!")
-        except Exception as e:
-            print(f"Falha na exportação: {e}")
 
     print("\nGeração finalizada.")
