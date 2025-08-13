@@ -1,21 +1,12 @@
-import numpy as np
-import pyvista as pv
+Explicação Detalhada do Script concentric_circles_pyvista.py
 
-# --- Parâmetros Configuráveis ---
-BASE_SPHERE_RADIUS = 1.0       # Raio da casca esférica mais interna.
-RIND_THICKNESS = 0.05          # Raio menor dos toros (espessura das cascas).
-NUM_CONCENTRIC_SHELLS = 4      # Número de cascas concêntricas a gerar.
-SHELL_SPACING = 0.5            # Distância incremental entre os raios de cascas concêntricas sucessivas.
-TORUS_MAJOR_SECTIONS = 128     # Resolução do círculo maior do toro (número de segmentos).
-TORUS_MINOR_SECTIONS = 64      # Resolução do círculo menor do toro (número de segmentos).
+Este script utiliza a biblioteca `pyvista` para gerar e visualizar uma geometria 3D complexa inspirada na obra "Cascas Concêntricas" de M.C. Escher.
 
-ADD_CENTRAL_SPHERE = True      # Se True, adiciona uma esfera sólida no centro.
-CENTRAL_SPHERE_RADIUS = 0.6    # Raio da esfera central. Deve ser menor que BASE_SPHERE_RADIUS.
-APPLY_COLOR_GRADIENT = True    # Se True, aplica o degradê de cores.
+--- Seção de Parâmetros Configuráveis ---
 
-APPLY_BOOLEAN_UNION = True     # Se True, todas as cascas serão unidas em uma única malha.
-SHOW_VISUALIZATION = True      # Se True, o modelo será visualizado interativamente.
+Esta seção no topo do arquivo permite que você altere a aparência do modelo final facilmente. Cada variável controla um aspecto específico, como o tamanho, a quantidade de cascas, a resolução (suavidade) dos anéis e se certas etapas (como colorir ou unir as peças) devem ser executadas.
 
+--- Função `apply_radial_gradient` ---
 
 def apply_radial_gradient(mesh, color_stops_rgb):
     """
@@ -23,31 +14,40 @@ def apply_radial_gradient(mesh, color_stops_rgb):
     :param mesh: O objeto de malha PyVista a ser colorido.
     :param color_stops_rgb: Uma lista de cores [R, G, B] no formato 0-255.
     """
+    # Pega as coordenadas de todos os pontos (vértices) da malha.
     vertices = mesh.points
     if len(vertices) == 0:
         return mesh
 
+    # Calcula a distância de cada vértice ao centro (0,0,0).
     radii = np.linalg.norm(vertices, axis=1)
     min_radius, max_radius = np.min(radii), np.max(radii)
 
+    # Normaliza as distâncias para um valor entre 0 (mais próximo) e 1 (mais distante).
     if max_radius == min_radius:
         normalized_radii = np.zeros_like(radii)
     else:
         normalized_radii = (radii - min_radius) / (max_radius - min_radius)
 
+    # Prepara as cores do degradê para a interpolação.
     color_stops_array = np.array(color_stops_rgb)
     interp_points = np.linspace(0, 1, len(color_stops_rgb))
 
+    # Interpola cada canal de cor (R, G, B) com base na distância normalizada.
     r = np.interp(normalized_radii, interp_points, color_stops_array[:, 0])
     g = np.interp(normalized_radii, interp_points, color_stops_array[:, 1])
     b = np.interp(normalized_radii, interp_points, color_stops_array[:, 2])
 
+    # Combina os canais de volta em cores RGB e as atribui à malha.
     vertex_colors = np.vstack([r, g, b]).T.astype(np.uint8)
     mesh.point_data['colors'] = vertex_colors
     
     print(" -> Degradê de cores radial aplicado com sucesso.")
     return mesh
 
+Esta função é responsável por colorir o objeto. Ela cria um degradê que vai do centro para fora, usando a distância de cada ponto da superfície ao centro do modelo para misturar as cores.
+
+--- Função `get_great_circle_normals` ---
 
 def get_great_circle_normals():
     """Define os vetores normais para os 9 grandes círculos (simetria octaédrica)."""
@@ -56,10 +56,16 @@ def get_great_circle_normals():
         np.array([1, 1, 0]), np.array([1, -1, 0]), np.array([1, 0, 1]),
         np.array([1, 0, -1]), np.array([0, 1, 1]), np.array([0, 1, -1])
     ]
+    # Normaliza os vetores para que todos tenham comprimento 1 (vetores unitários).
     return [n / np.linalg.norm(n) for n in normals]
+
+Esta função define as 9 direções para os anéis de cada casca. Esses vetores garantem que os anéis se cruzem de maneira simétrica e esteticamente agradável, criando a aparência complexa do modelo.
+
+--- Função `create_single_rind` ---
 
 def create_single_rind(major_radius, minor_radius, target_normal):
     """Cria um único anel (toro) e o rotaciona para a orientação correta."""
+    # Cria um anel (toro) padrão. Por padrão, seu eixo é o eixo Z.
     rind_mesh = pv.Torus(
         radius=major_radius,
         tube_radius=minor_radius,
@@ -67,33 +73,46 @@ def create_single_rind(major_radius, minor_radius, target_normal):
         phi_resolution=TORUS_MINOR_SECTIONS,
     )
 
-    # Calcula a rotação para alinhar com a normal alvo.
+    # Calcula a rotação necessária para alinhar o anel com a normal desejada.
     initial_normal = np.array([0, 0, 1])
     rotation_axis = np.cross(initial_normal, target_normal)
     angle_rad = np.arccos(np.dot(initial_normal, target_normal))
     
+    # Aplica a rotação, se necessário.
     if not np.allclose(angle_rad, 0):
         rind_mesh.rotate_vector(rotation_axis, np.degrees(angle_rad), inplace=True)
 
     return rind_mesh
 
+Esta é a "fábrica" de anéis. Ela cria um único anel com o tamanho e resolução especificados e, em seguida, calcula e aplica a rotação necessária para posicioná-lo corretamente no espaço, de acordo com uma das 9 normais.
+
+--- Função `generate_geometry` ---
+
 def generate_geometry():
     """Gera todas as peças geométricas (esfera central e anéis)."""
     print("1. Gerando a geometria das cascas e da esfera central...")
     all_meshes = []
+    # Se a opção estiver ativada, cria a esfera central.
     if ADD_CENTRAL_SPHERE:
         print(f" -> Gerando esfera central com raio: {CENTRAL_SPHERE_RADIUS}")
         central_sphere = pv.Icosphere(subdivisions=5, radius=CENTRAL_SPHERE_RADIUS)
         all_meshes.append(central_sphere)
 
+    # Pega as 9 direções para os anéis.
     great_circle_normals = get_great_circle_normals()
+    # Loop para criar cada casca concêntrica.
     for i in range(NUM_CONCENTRIC_SHELLS):
         current_radius = BASE_SPHERE_RADIUS + i * SHELL_SPACING
         print(f" -> Gerando Casca {i+1}/{NUM_CONCENTRIC_SHELLS} com Raio: {current_radius:.2f}")
+        # Loop para criar os 9 anéis de cada casca.
         for j, target_normal in enumerate(great_circle_normals):
             rind_mesh = create_single_rind(current_radius, RIND_THICKNESS, target_normal)
             all_meshes.append(rind_mesh)
     return all_meshes
+
+Esta função orquestra a criação de todas as peças. Ela chama `create_single_rind` repetidamente em loops para gerar todos os anéis de todas as cascas, além da esfera central, e armazena tudo em uma lista.
+
+--- Função `combine_meshes` ---
 
 def combine_meshes(meshes_list):
     """Combina uma lista de malhas em uma única malha final."""
@@ -104,19 +123,27 @@ def combine_meshes(meshes_list):
     if APPLY_BOOLEAN_UNION:
         try:
             print(" -> Iniciando união booleana (pode levar algum tempo)...")
+            # Começa com a primeira malha.
             final_mesh = meshes_list[0].copy()
             total = len(meshes_list)
+            # Une iterativamente cada malha com o resultado anterior.
             for i in range(1, total):
                 print(f"    - Unindo malha {i+1}/{total}...")
                 final_mesh = final_mesh.boolean_union(meshes_list[i])
             print(" -> União booleana concluída com sucesso.")
         except Exception as e:
+            # Se a união falhar, usa um método mais simples (merge).
             print(f" -> Erro na união booleana: {e}. Recorrendo à concatenação (merge).")
             final_mesh = pv.merge(meshes_list)
     else:
+        # Se a união booleana não estiver ativada, apenas junta as malhas.
         final_mesh = pv.merge(meshes_list)
         print(" -> Concatenação de malhas (merge) concluída.")
     return final_mesh
+
+Esta função pega a lista de todas as peças e as funde em um único objeto 3D. A **União Booleana** é um processo complexo que cria uma superfície "limpa" e contínua, ideal para impressão 3D, enquanto o `merge` (ou concatenação) é mais rápido, mas pode deixar faces internas sobrepostas.
+
+--- Função `apply_colors` ---
 
 def apply_colors(mesh):
     """Aplica o degradê de cores à malha final."""
@@ -124,13 +151,19 @@ def apply_colors(mesh):
         return mesh
     
     print("3. Aplicando o degradê de cores...")
+    # Define as cores do degradê (amarelo, laranja, magenta, roxo).
     color_gradient = [
         [255, 255, 0],   # Amarelo (interno)
         [255, 165, 0],   # Laranja
         [255, 0, 255],   # Magenta
         [128, 0, 128]    # Roxo (externo)
     ]
+    # Chama a função que faz o cálculo e aplicação das cores.
     return apply_radial_gradient(mesh, color_gradient)
+
+Esta é uma função de conveniência que define o degradê de cores específico e chama `apply_radial_gradient` para fazer o trabalho.
+
+--- Função `render_model` ---
 
 def render_model(mesh):
     """Renderiza e exibe o modelo 3D final."""
@@ -138,24 +171,39 @@ def render_model(mesh):
         return
     
     print("4. Exibindo visualização do modelo...")
+    # Cria a janela de visualização 3D.
     plotter = pv.Plotter(window_size=[1024, 768])
+    # Adiciona a malha final à cena.
     plotter.add_mesh(
         mesh,
-        scalars='colors' if APPLY_COLOR_GRADIENT else None,
-        rgb=APPLY_COLOR_GRADIENT,
-        smooth_shading=True,
+        scalars='colors' if APPLY_COLOR_GRADIENT else None, # Usa as cores que calculamos.
+        rgb=APPLY_COLOR_GRADIENT, # Informa que os escalares são cores RGB.
+        smooth_shading=True, # Suaviza a iluminação para um visual mais orgânico.
     )
+    # Define o fundo como preto.
     plotter.set_background('black')
+    # Ativa o anti-aliasing para suavizar as bordas serrilhadas.
     plotter.enable_anti_aliasing('fxaa')
+    # Abre a janela interativa.
     plotter.show()
     print(" -> Visualização concluída. Feche a janela para continuar.")
+
+Esta função prepara e exibe a janela 3D com o seu modelo final, configurando a iluminação, cores e fundo.
+
+--- Bloco de Execução Principal ---
 
 if __name__ == "__main__":
     print("Iniciando a geração das 'Cascas Concêntricas' de Escher (versão PyVista)...")
 
+    # 1. Gera todas as peças geométricas.
     list_of_meshes = generate_geometry()
+    # 2. Combina as peças em uma única malha.
     final_mesh = combine_meshes(list_of_meshes)
+    # 3. Aplica as cores.
     final_mesh = apply_colors(final_mesh)
+    # 4. Mostra o resultado.
     render_model(final_mesh)
 
     print("\nGeração finalizada.")
+
+Este é o ponto de entrada do script. Ele chama as funções principais na ordem correta para gerar, combinar, colorir e, finalmente, exibir o modelo 3D.
