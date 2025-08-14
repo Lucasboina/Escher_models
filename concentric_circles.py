@@ -1,5 +1,6 @@
 import numpy as np
 import pyvista as pv
+import vtk # <-- ADICIONAR ESTA LINHA
 
 # --- Parâmetros Configuráveis ---
 BASE_SPHERE_RADIUS = 1.0       # Raio da casca esférica mais interna.
@@ -20,8 +21,6 @@ SHOW_VISUALIZATION = True      # Se True, o modelo será visualizado interativam
 def apply_radial_gradient(mesh, color_stops_rgb):
     """
     Aplica um degradê de cores a uma malha com base na distância de cada vértice ao centro.
-    :param mesh: O objeto de malha PyVista a ser colorido.
-    :param color_stops_rgb: Uma lista de cores [R, G, B] no formato 0-255.
     """
     vertices = mesh.points
     if len(vertices) == 0:
@@ -58,22 +57,40 @@ def get_great_circle_normals():
     ]
     return [n / np.linalg.norm(n) for n in normals]
 
+# -----------------------------------------------------------------------------
+# *** FUNÇÃO TOTALMENTE REESCRITA PARA MÁXIMA COMPATIBILIDADE ***
+# -----------------------------------------------------------------------------
 def create_single_rind(major_radius, minor_radius, target_normal):
-    """Cria um único anel (toro) e o rotaciona para a orientação correta."""
-    rind_mesh = pv.Torus(
-        radius=major_radius,
-        tube_radius=minor_radius,
-        theta_resolution=TORUS_MAJOR_SECTIONS,
-        phi_resolution=TORUS_MINOR_SECTIONS,
+    """Cria um único anel (toro) e o rotaciona para a orientação correta de forma robusta."""
+    
+    # Passo 1: Criar a fonte paramétrica VTK para o toro
+    source = vtk.vtkParametricTorus()
+    source.SetRingRadius(major_radius)       # Define o raio principal
+    source.SetCrossSectionRadius(minor_radius) # Define o raio do tubo
+
+    # Passo 2: Criar a malha PyVista a partir da fonte VTK
+    rind_mesh = pv.surface_from_para(
+        source,
+        u_res=TORUS_MAJOR_SECTIONS, # Mapeia a resolução para os parâmetros corretos
+        v_res=TORUS_MINOR_SECTIONS
     )
 
-    # Calcula a rotação para alinhar com a normal alvo.
+    # O resto da lógica de rotação, que já está correta, permanece a mesma.
     initial_normal = np.array([0, 0, 1])
-    rotation_axis = np.cross(initial_normal, target_normal)
-    angle_rad = np.arccos(np.dot(initial_normal, target_normal))
+    target_normal = target_normal / np.linalg.norm(target_normal)
+    dot_product = np.dot(initial_normal, target_normal)
+
+    if np.allclose(dot_product, 1):
+        return rind_mesh
     
-    if not np.allclose(angle_rad, 0):
-        rind_mesh.rotate_vector(rotation_axis, np.degrees(angle_rad), inplace=True)
+    if np.allclose(dot_product, -1):
+        rind_mesh.rotate_x(180, inplace=True)
+        return rind_mesh
+
+    rotation_axis = np.cross(initial_normal, target_normal)
+    angle_rad = np.arccos(np.clip(dot_product, -1.0, 1.0))
+    
+    rind_mesh.rotate_vector(rotation_axis, np.degrees(angle_rad), inplace=True)
 
     return rind_mesh
 
@@ -83,7 +100,7 @@ def generate_geometry():
     all_meshes = []
     if ADD_CENTRAL_SPHERE:
         print(f" -> Gerando esfera central com raio: {CENTRAL_SPHERE_RADIUS}")
-        central_sphere = pv.Icosphere(subdivisions=5, radius=CENTRAL_SPHERE_RADIUS)
+        central_sphere = pv.Sphere(radius=CENTRAL_SPHERE_RADIUS, phi_resolution=60, theta_resolution=60)
         all_meshes.append(central_sphere)
 
     great_circle_normals = get_great_circle_normals()
@@ -107,11 +124,11 @@ def combine_meshes(meshes_list):
             final_mesh = meshes_list[0].copy()
             total = len(meshes_list)
             for i in range(1, total):
-                print(f"    - Unindo malha {i+1}/{total}...")
-                final_mesh = final_mesh.boolean_union(meshes_list[i])
-            print(" -> União booleana concluída com sucesso.")
+                print(f"      - Unindo malha {i+1}/{total}...", end='\r')
+                final_mesh = final_mesh.boolean_union(meshes_list[i], progress_bar=False)
+            print("\n -> União booleana concluída com sucesso.              ")
         except Exception as e:
-            print(f" -> Erro na união booleana: {e}. Recorrendo à concatenação (merge).")
+            print(f"\n -> Erro na união booleana: {e}. Recorrendo à concatenação (merge).")
             final_mesh = pv.merge(meshes_list)
     else:
         final_mesh = pv.merge(meshes_list)
@@ -126,7 +143,7 @@ def apply_colors(mesh):
     print("3. Aplicando o degradê de cores...")
     color_gradient = [
         [255, 255, 0],   # Amarelo (interno)
-        [255, 165, 0],   # Laranja
+        [255, 100, 0],   # Laranja
         [255, 0, 255],   # Magenta
         [128, 0, 128]    # Roxo (externo)
     ]
@@ -148,7 +165,7 @@ def render_model(mesh):
     plotter.set_background('black')
     plotter.enable_anti_aliasing('fxaa')
     plotter.show()
-    print(" -> Visualização concluída. Feche a janela para continuar.")
+    print(" -> Visualização concluída.")
 
 if __name__ == "__main__":
     print("Iniciando a geração das 'Cascas Concêntricas' de Escher (versão PyVista)...")
