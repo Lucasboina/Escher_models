@@ -1,6 +1,6 @@
 import numpy as np
 import pyvista as pv
-import vtk # <-- ADICIONAR ESTA LINHA
+import vtk
 
 # --- Parâmetros Configuráveis ---
 BASE_SPHERE_RADIUS = 1.0       # Raio da casca esférica mais interna.
@@ -57,9 +57,6 @@ def get_great_circle_normals():
     ]
     return [n / np.linalg.norm(n) for n in normals]
 
-# -----------------------------------------------------------------------------
-# *** FUNÇÃO TOTALMENTE REESCRITA PARA MÁXIMA COMPATIBILIDADE ***
-# -----------------------------------------------------------------------------
 def create_single_rind(major_radius, minor_radius, target_normal):
     """Cria um único anel (toro) e o rotaciona para a orientação correta de forma robusta."""
     
